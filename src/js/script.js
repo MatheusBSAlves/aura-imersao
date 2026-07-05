@@ -1,4 +1,6 @@
-const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+const prefersReducedMotion = window.matchMedia(
+  "(prefers-reduced-motion: reduce)",
+);
 
 const splitCandidates = (value) =>
   (value || "")
@@ -56,7 +58,10 @@ function setupVideos() {
       "loadeddata",
       () => {
         video.dataset.ready = "true";
-        if (video.classList.contains("hero__video") && !prefersReducedMotion.matches) {
+        if (
+          video.classList.contains("hero__video") &&
+          !prefersReducedMotion.matches
+        ) {
           video.play().catch(() => {});
         }
       },
@@ -153,27 +158,97 @@ function setupHeaderAndNavigation() {
     headerObserver.observe(hero);
   }
 
-  if (!sections.length || !("IntersectionObserver" in window)) return;
+  if (!sections.length) return;
 
-  const sectionObserver = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        navLinks.forEach((link) => {
-          link.classList.toggle(
-            "is-active",
-            link.getAttribute("href") === `#${entry.target.id}`,
-          );
-        });
-      });
-    },
-    {
-      rootMargin: "-40% 0px -50% 0px",
-      threshold: 0.01,
-    },
-  );
+  const setActiveNavLink = (sectionId) => {
+    navLinks.forEach((link) => {
+      const isActive = link.getAttribute("href") === `#${sectionId}`;
+      link.classList.toggle("is-active", isActive);
+    });
+  };
 
-  sections.forEach((section) => sectionObserver.observe(section));
+  const clearActiveNavLink = () => {
+    navLinks.forEach((link) => link.classList.remove("is-active"));
+  };
+
+  let activeSectionFrame = null;
+  const updateActiveSection = () => {
+    if (!header) {
+      clearActiveNavLink();
+      return;
+    }
+
+    const headerOffset = Math.max(72, header.offsetHeight + 24);
+    const viewportTop = headerOffset;
+    const viewportBottom = window.innerHeight - 24;
+
+    if (hero) {
+      const heroRect = hero.getBoundingClientRect();
+      const heroVisibleTop = Math.max(heroRect.top, viewportTop);
+      const heroVisibleBottom = Math.min(heroRect.bottom, viewportBottom);
+      const heroVisibleHeight = Math.max(0, heroVisibleBottom - heroVisibleTop);
+
+      if (heroVisibleHeight > 0 && heroRect.bottom >= viewportTop + 80) {
+        clearActiveNavLink();
+        return;
+      }
+    }
+
+    let activeSection = null;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    sections.forEach((section) => {
+      const rect = section.getBoundingClientRect();
+      const visibleTop = Math.max(rect.top, viewportTop);
+      const visibleBottom = Math.min(rect.bottom, viewportBottom);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+
+      if (visibleHeight <= 0) return;
+
+      const distance = Math.abs(rect.top - viewportTop);
+      const score = visibleHeight * 1000 - distance;
+
+      if (score > bestScore) {
+        bestScore = score;
+        activeSection = section;
+      }
+    });
+
+    if (activeSection) {
+      setActiveNavLink(activeSection.id);
+      return;
+    }
+
+    clearActiveNavLink();
+  };
+
+  const scheduleActiveSectionUpdate = () => {
+    if (activeSectionFrame) return;
+
+    activeSectionFrame = window.requestAnimationFrame(() => {
+      activeSectionFrame = null;
+      updateActiveSection();
+    });
+  };
+
+  navLinks.forEach((link) => {
+    link.addEventListener("click", () => {
+      const targetId = link.getAttribute("href")?.replace("#", "") || "";
+      if (targetId) {
+        setActiveNavLink(targetId);
+      }
+
+      window.setTimeout(scheduleActiveSectionUpdate, 220);
+    });
+  });
+
+  window.addEventListener("scroll", scheduleActiveSectionUpdate, {
+    passive: true,
+  });
+  window.addEventListener("resize", scheduleActiveSectionUpdate);
+  window.addEventListener("load", scheduleActiveSectionUpdate);
+
+  scheduleActiveSectionUpdate();
 }
 
 function setupBuildSequence() {
@@ -431,7 +506,8 @@ function setupContactForm() {
     }
 
     if (status) {
-      status.textContent = "Mensagem validada. Abrindo seu aplicativo de e-mail para envio.";
+      status.textContent =
+        "Mensagem validada. Abrindo seu aplicativo de e-mail para envio.";
     }
 
     window.location.href = buildMailto(form);
